@@ -32,6 +32,11 @@
 # in the path of a release is not something to resolve at run time.
 name: release
 
+# `pull_request` is not decoration: a release arrives on a branch and merges
+# through one, because `main` requires the two jobs below and a commit that has
+# never been on `main` has no runs for them to read. So this is where a
+# release is actually checked, and the `push` on `main` is the record of what
+# was merged.
 on:
   push:
     branches: [main]

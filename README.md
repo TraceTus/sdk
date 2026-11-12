@@ -25,15 +25,18 @@ documented at [docs.tracetus.com](https://docs.tracetus.com).
 truth is TraceTus's own monorepo, which is private: the API, the contracts, the
 console and the verifier live there with these two packages, and that is where
 they are changed. At each release the mirror is rebuilt from a single commit of
-it, from an explicit list of paths, and pushed here as one commit with no
-history.
+it, from an explicit list of paths, and arrives here as one commit — through a
+pull request from a `release/<version>` branch, so that this repository's own
+suites run on it before it reaches `main`.
 
-So: **nobody develops here.** A commit pushed to this repository is replaced by
-the next release. A pull request opened here cannot be merged as it stands —
-what happens instead is that it is read, carried into the monorepo with the
-author credited in the change, and comes back out in the following release. If
-you are about to write a patch, open an issue first and say what you intend:
-that is the cheapest way for both of us.
+So: **nobody develops here.** Every file is replaced wholesale by the next
+release, so a commit of your own does not survive one.
+
+**A pull request you open cannot be merged as it stands** — only a release
+branch is ever merged. What happens to yours instead is that it is read,
+carried into the monorepo with you credited in the change, and comes back out
+in the following release. If you are about to write a patch, open an issue
+first and say what you intend: that is the cheapest way for both of us.
 
 What is here is everything the two packages are built from and tested with:
 
