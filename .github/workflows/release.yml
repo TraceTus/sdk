@@ -127,7 +127,7 @@ jobs:
       # no token, and published there without being rebuilt.
       - name: Pack what npm would receive
         working-directory: packages/sdk-js
-        run: npm pack --pack-destination ../../tarball
+        run: mkdir -p ../../tarball && npm pack --pack-destination ../../tarball
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
