@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# The pins this tree resolves through, at the version the platform's monorepo
+# holds them at. pnpm 10 reads them from here and pnpm 9 from package.json, so
+# they are written in both. See SECURITY.md.
+overrides:
+  vite: "^8.3.6"
+  tinypool: "^2.1.2"
+  source-map-js: "^1.2.2"

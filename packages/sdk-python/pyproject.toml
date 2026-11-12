@@ -1,0 +1,84 @@
+[build-system]
+# 77 is where `license` as an SPDX string and `license-files` arrived.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tracetus"
+version = "0.1.0"
+description = "TraceTus API client: issue records, read proofs, verify an inclusion proof offline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "TraceTus" }]
+keywords = ["tracetus", "traceability", "provenance", "merkle", "openapi"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+# `typing_extensions` is imported by the generated client itself, for `Self` on
+# the versions that do not have it in `typing`. It arrives through `httpx` as
+# well, by way of `anyio`, but a direct import belongs in a direct dependency.
+dependencies = [
+  "httpx>=0.27",
+  "attrs>=23",
+  "python-dateutil>=2.9",
+  "pycryptodome>=3.20",
+  "typing-extensions>=4.12",
+]
+
+# What the sdist carries: the two packages and the licence, and not the tests.
+# A test file in a customer's site-packages is noise at best, and at worst it is
+# a fixture somebody mistakes for documentation.
+[tool.setuptools.exclude-package-data]
+"*" = ["tests", "tests.*"]
+
+# Only what a reader outside can open. `Source` and `Issues` point at the public
+# repository the clients are mirrored into at each release, not at the private
+# monorepo they are developed in: a link that answers 404 on the package page is
+# worse than no link at all.
+[project.urls]
+Homepage = "https://docs.tracetus.com"
+Documentation = "https://docs.tracetus.com"
+Source = "https://github.com/TraceTus/sdk"
+Issues = "https://github.com/TraceTus/sdk/issues"
+
+[project.optional-dependencies]
+# The generator is pinned, because its output is committed and the job diffs a
+# fresh generation against it: a floating version would rewrite the client under
+# the job. `ruff` is bounded to a minor for the same reason — a new minor brings
+# new rules, and the job would fail on code nobody touched.
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.24",
+  "openapi-python-client==0.28.4",
+  "ruff>=0.17.4,<0.18",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tracetus = ["py.typed"]
+tracetus_client = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# `src/tracetus_client` is written by `openapi-python-client`, which formats and
+# lints its own output, and `scripts/generate.sh` plus the job's diff are what
+# hold it honest. A finding in it is upstream's to fix and ours to not edit by
+# hand, the same reason the repository's formatter leaves the generated
+# JavaScript client out.
+extend-exclude = ["src/tracetus_client"]
+
+# The package has an asynchronous surface, so its tests do too.
+[tool.pytest.ini_options]
+asyncio_mode = "strict"

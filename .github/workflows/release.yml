@@ -1,0 +1,248 @@
+# The public clients' pipeline: it checks every push, and publishes on a tag.
+#
+# Both registries verify this file by name, through trusted publishing: npm and
+# PyPI are configured with the repository, the workflow file and the
+# environment, and they accept an upload only from a run that matches. So **no
+# publishing token exists anywhere** — not here, not on a laptop — and renaming
+# this file breaks publishing until the entry on each registry is changed too.
+#
+# **Building and publishing are separate jobs, and only the publishing ones can
+# mint the identity token.** That is the whole shape of this file. A job that
+# holds `id-token: write` can publish under our names, so nothing else runs in
+# it: no install that resolves, no global `npm install`, no browser download,
+# no test suite, no development dependency of any kind. A compromised
+# development dependency on release day would otherwise publish with valid
+# provenance. The building jobs do all of that with no token to steal, and hand
+# over exactly two files through an artifact.
+#
+# Two tags, one per package, because a package may need a release the other
+# does not: `sdk-js-v1.2.3` publishes `@tracetus/sdk` and `sdk-python-v1.2.3`
+# publishes `tracetus`. A tag whose version does not match the manifest it
+# would publish, or that names a commit which is not on `main`, is refused by
+# the `tag` job — which both build jobs need, so it is refused **before
+# anything is built** rather than after.
+#
+# Every action is pinned to a commit, not to a tag. A tag moves, and an action
+# in the path of a release is not something to resolve at run time.
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "sdk-js-v*"
+      - "sdk-python-v*"
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by default. Each job asks for what it needs and nothing asks for
+# more than that.
+permissions:
+  contents: read
+
+jobs:
+  # What a tag has to be before anything is built from it, which is why this
+  # job comes first and both build jobs need it: a tag on a branch nobody
+  # reviewed, or one whose version does not match the manifest it would
+  # publish, costs a few seconds here rather than a full build and a publish
+  # job's review.
+  #
+  # It runs on every push, and checks nothing when the ref is not a tag — a job
+  # that is skipped would skip the two that need it.
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      # `fetch-depth: 0` because the check below asks whether the tagged commit
+      # is on `main`, and a shallow clone cannot answer.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22 }
+
+      - name: A tag names a commit on the default branch, and its own version
+        run: |
+          case "${GITHUB_REF}" in
+            refs/tags/*) ;;
+            *) echo "not a tag: nothing to check"; exit 0 ;;
+          esac
+
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "${GITHUB_SHA}" FETCH_HEAD
+
+          case "${GITHUB_REF_NAME}" in
+            sdk-js-v*)
+              version="$(node -p "require('./packages/sdk-js/package.json').version")"
+              test "sdk-js-v${version}" = "${GITHUB_REF_NAME}"
+              ;;
+            sdk-python-v*)
+              version="$(grep -m1 '^version = ' packages/sdk-python/pyproject.toml | cut -d'"' -f2)"
+              test "sdk-python-v${version}" = "${GITHUB_REF_NAME}"
+              ;;
+            *) echo "a tag this workflow does not publish from"; exit 1 ;;
+          esac
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+  # The JavaScript client, as npm would receive it. The install is frozen: this
+  # tree carries a lockfile of its own, derived from the resolutions of the
+  # platform's monorepo when the mirror built it, so what is tested here is a
+  # toolchain that repository has already tested.
+  javascript:
+    needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Both packages build
+        run: pnpm run build
+
+      - name: Both packages typecheck
+        run: pnpm run typecheck
+
+      # One of the client's suites runs in a real Chromium: that is the only
+      # way to catch a client that calls a detached global `fetch`, which Node
+      # allows and a browser and an edge runtime refuse.
+      - run: pnpm --filter @tracetus/sdk exec playwright install --with-deps chromium-headless-shell
+
+      - name: Both suites pass
+        run: pnpm run test
+
+      - name: The tarball installs and runs, in ESM and in CommonJS
+        run: pnpm --filter @tracetus/sdk smoke
+
+      # The request layer is generated from the contract in this repository. A
+      # copy that no longer matches it would publish a client for an API that
+      # does not exist.
+      - name: The generated client is not stale
+        run: |
+          pnpm run generate
+          git diff --exit-code -- packages/sdk-js/src/generated
+
+      # The one file the publishing job gets. It is built here, by a job with
+      # no token, and published there without being rebuilt.
+      - name: Pack what npm would receive
+        working-directory: packages/sdk-js
+        run: npm pack --pack-destination ../../tarball
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-tarball
+          path: tarball/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  python:
+    needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: Install it and its development tools
+        working-directory: packages/sdk-python
+        run: pip install -e ".[dev]" build twine
+
+      - name: The hand-written half is clean and formatted
+        working-directory: packages/sdk-python
+        run: |
+          ruff check src/tracetus tests examples
+          ruff format --check src/tracetus tests examples
+
+      - name: Its suite passes
+        working-directory: packages/sdk-python
+        run: pytest -q
+
+      # `src`, not only the generated package: the script also writes the
+      # method table the hand-written half reads.
+      - name: The generated client is not stale
+        working-directory: packages/sdk-python
+        run: |
+          sh scripts/generate.sh
+          git diff --exit-code -- src
+
+      - name: What PyPI would receive builds, and twine accepts it
+        working-directory: packages/sdk-python
+        run: |
+          python -m build
+          twine check dist/*
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-dist
+          path: packages/sdk-python/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Publishing. Each of these downloads what the job above it built and
+  # publishes it. Nothing is installed, nothing is resolved and nothing is
+  # rebuilt: the whole point of splitting them is that the job holding the
+  # token runs as little code as it can.
+  publish-npm:
+    needs: javascript
+    if: startsWith(github.ref, 'refs/tags/sdk-js-v')
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+
+      # Trusted publishing needs npm 11.5.1 or newer and Node 22.14.0 or
+      # newer, and the npm bundled with Node 22 is older. Pinned rather than
+      # `@latest`: this job can publish under our name, and resolving a version
+      # at run time is the one thing it must not do. Raising it is a decision,
+      # made here.
+      - run: npm install --global npm@11.5.1
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: npm-tarball
+          path: tarball
+
+      - name: The tarball is the one this version would publish
+        run: |
+          version="$(node -p "require('./packages/sdk-js/package.json').version")"
+          echo "TARBALL=tarball/tracetus-sdk-${version}.tgz" >> "${GITHUB_ENV}"
+          test -f "tarball/tracetus-sdk-${version}.tgz"
+
+      # No `--provenance`: npm attaches a provenance attestation by itself when
+      # a publish comes from trusted publishing, a public repository and a
+      # public package, and all three hold here. The attestation names this
+      # workflow run, which is the same run the tarball was built in, so it
+      # still says what built it. A customer checks it with
+      # `npm audit signatures`.
+      - name: Publish @tracetus/sdk
+        run: npm publish "${TARBALL}" --access public
+
+  publish-pypi:
+    needs: python
+    if: startsWith(github.ref, 'refs/tags/sdk-python-v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Publish tracetus
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist
+          skip-existing: true

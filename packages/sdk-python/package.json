@@ -1,0 +1,12 @@
+{
+  "name": "@tracetus/sdk-python",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'python package: see README.md'",
+    "typecheck": "echo skip",
+    "test": "echo 'the python suite runs under pytest, not under pnpm: pytest -q'",
+    "generate": "sh scripts/generate.sh"
+  }
+}

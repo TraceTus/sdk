@@ -1,0 +1,8 @@
+# What the source distribution carries beyond the packages themselves. The
+# tests are deliberately absent: they belong to this repository, not to a
+# customer's site-packages.
+include LICENSE
+include README.md
+include src/tracetus/py.typed
+include src/tracetus_client/py.typed
+prune tests

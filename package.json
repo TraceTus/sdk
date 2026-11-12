@@ -1,0 +1,21 @@
+{
+  "name": "tracetus-sdk",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter @tracetus/core build && pnpm --filter @tracetus/sdk build",
+    "test": "pnpm --filter @tracetus/core test && pnpm --filter @tracetus/sdk test",
+    "typecheck": "pnpm --filter @tracetus/core typecheck && pnpm --filter @tracetus/sdk typecheck",
+    "generate": "pnpm --filter @tracetus/sdk generate"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "^8.3.6",
+      "tinypool": "^2.1.2",
+      "source-map-js": "^1.2.2"
+    }
+  }
+}

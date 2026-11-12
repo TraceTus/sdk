@@ -1,0 +1,19 @@
+# Everything in this repository is rebuilt from a commit of the platform's
+# monorepo at each release, so nothing generated belongs in it.
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python: a virtual environment, the build's output and the tools' caches.
+.venv*/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# A credential never enters this repository. Publishing needs none: the
+# registries verify the workflow itself (SECURITY.md).
+.env
+.env.*
+!.env.example

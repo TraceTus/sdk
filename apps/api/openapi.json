@@ -1,0 +1,5243 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "version": "0.1.0",
+    "title": "TraceTus API",
+    "description": "Proof layer for origin, certification and custody records. Only hashes and references reach the network; a record is a leaf and a transaction is a batch. Every response carries the environment label. Every path lives under /v1, and within /v1 only additive changes are made: a new route, a new optional field. Every POST requires an Idempotency-Key."
+  },
+  "tags": [
+    {
+      "name": "records",
+      "description": "Issuing and reading records"
+    },
+    {
+      "name": "private content",
+      "description": "Content that could identify a person, kept out of the record: the record carries the identifier and the content stays with us, encrypted with your key"
+    },
+    {
+      "name": "connectors",
+      "description": "Connectors of an issuer: one URL, one secret and one key each"
+    },
+    {
+      "name": "verification",
+      "description": "Public verification, no authentication"
+    },
+    {
+      "name": "operations",
+      "description": "Operational metrics, for whoever runs the platform"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Issuer API key with scopes. `Authorization: Bearer tk_...`"
+      }
+    },
+    "schemas": {
+      "IssueRecordResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^rec_[0-9a-f]{32}$"
+              },
+              "schemaId": {
+                "type": "string",
+                "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+                "example": "tracetus:custody-event:1"
+              },
+              "recordHash": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Salt of the hash, handed to the issuer. Without it the content cannot be proven."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "batched",
+                  "anchored",
+                  "revoked"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "schemaId",
+              "recordHash",
+              "salt",
+              "status",
+              "createdAt"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "record"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "SCHEMA_UNKNOWN"
+              },
+              "message": {
+                "type": "string"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "code",
+                    "detail"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "issues"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "error"
+        ]
+      },
+      "IssueRecordRequest": {
+        "type": "object",
+        "properties": {
+          "schemaId": {
+            "type": "string",
+            "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+            "example": "tracetus:custody-event:1"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Record content, validated against the registered schema. It never reaches the network; its hash does."
+          },
+          "subjectRef": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "Random identifier of the subject, generated by the issuer. A natural person is never identified here."
+          },
+          "refRecordId": {
+            "type": "string",
+            "pattern": "^rec_[0-9a-f]{32}$",
+            "description": "Previous record in the chain of custody."
+          }
+        },
+        "required": [
+          "schemaId",
+          "payload"
+        ]
+      },
+      "IssueBatchResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "count": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^rec_[0-9a-f]{32}$"
+                },
+                "schemaId": {
+                  "type": "string",
+                  "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+                  "example": "tracetus:custody-event:1"
+                },
+                "recordHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                "salt": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "description": "Salt of the hash, handed to the issuer. Without it the content cannot be proven."
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "batched",
+                    "anchored",
+                    "revoked"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "id",
+                "schemaId",
+                "recordHash",
+                "salt",
+                "status",
+                "createdAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "envLabel",
+          "count",
+          "records"
+        ]
+      },
+      "IssueBatchRequest": {
+        "type": "object",
+        "properties": {
+          "schemaId": {
+            "type": "string",
+            "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+            "example": "tracetus:custody-event:1"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "description": "Record content, validated against the registered schema. It never reaches the network; its hash does."
+                },
+                "subjectRef": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "description": "Random identifier of the subject, generated by the issuer. A natural person is never identified here."
+                },
+                "refRecordId": {
+                  "type": "string",
+                  "pattern": "^rec_[0-9a-f]{32}$",
+                  "description": "Previous record in the chain of custody."
+                }
+              },
+              "required": [
+                "payload"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "schemaId",
+          "records"
+        ]
+      },
+      "RecordDetail": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^rec_[0-9a-f]{32}$"
+              },
+              "schemaId": {
+                "type": "string",
+                "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+                "example": "tracetus:custody-event:1"
+              },
+              "recordHash": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "salt": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Salt of the hash, handed to the issuer. Without it the content cannot be proven."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "batched",
+                  "anchored",
+                  "revoked"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "refRecordId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^rec_[0-9a-f]{32}$"
+              }
+            },
+            "required": [
+              "id",
+              "schemaId",
+              "recordHash",
+              "salt",
+              "status",
+              "createdAt",
+              "refRecordId"
+            ]
+          },
+          "batch": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^bat_[0-9a-f]{32}$"
+              },
+              "merkleRoot": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "leafCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "sealed",
+                  "submitted",
+                  "confirmed",
+                  "failed"
+                ]
+              },
+              "sealedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "merkleRoot",
+              "leafCount",
+              "status",
+              "sealedAt"
+            ]
+          },
+          "proof": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "leafIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "siblings": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              },
+              "root": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "leafIndex",
+              "siblings",
+              "root"
+            ]
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "network": {
+                  "type": "string",
+                  "enum": [
+                    "rbb",
+                    "public_anchor"
+                  ]
+                },
+                "envLabel": {
+                  "type": "string",
+                  "enum": [
+                    "simulation",
+                    "testnet",
+                    "mainnet"
+                  ],
+                  "example": "simulation"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "submitted",
+                    "confirmed",
+                    "failed"
+                  ]
+                },
+                "txHash": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                "blockNumber": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Block number as text: it does not fit a JavaScript number."
+                },
+                "confirmedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "network",
+                "envLabel",
+                "status",
+                "txHash",
+                "blockNumber",
+                "confirmedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "envLabel",
+          "record",
+          "batch",
+          "proof",
+          "anchors"
+        ]
+      },
+      "PrivateContent": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pct_[0-9a-f]{32}$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{2,39}$",
+                "description": "Purpose the issuer declares for keeping this content, as a code of its own. It is what the LGPD requires recorded and what bounds the reading.",
+                "example": "device-location"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "stored",
+                  "erased"
+                ],
+                "description": "`stored` while the content can be read. `erased` once it cannot: either you erased it, or its retention date has passed — a listing never shows as stored something a read would refuse."
+              },
+              "retentionUntil": {
+                "type": "string",
+                "format": "date"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "erasedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "When the content was dropped. Null while it is still there, and also while its retention date has passed and the retention routine has not come round yet."
+              }
+            },
+            "required": [
+              "id",
+              "purpose",
+              "status",
+              "retentionUntil",
+              "createdAt",
+              "erasedAt"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "content"
+        ]
+      },
+      "StorePrivateContentRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Content that stays with us, encrypted with your key. It never reaches a record, a log, a URL, a webhook, the public verifier or the network: the record carries the identifier of this content instead."
+          },
+          "purpose": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{2,39}$",
+            "description": "Purpose the issuer declares for keeping this content, as a code of its own. It is what the LGPD requires recorded and what bounds the reading.",
+            "example": "device-location"
+          },
+          "retentionUntil": {
+            "type": "string",
+            "format": "date",
+            "description": "Date the content is erased on, at the latest. Defaults to 365 days from now and goes no further than 3650 days.",
+            "example": "2027-11-11"
+          }
+        },
+        "required": [
+          "content",
+          "purpose"
+        ]
+      },
+      "PrivateContentWithContent": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pct_[0-9a-f]{32}$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{2,39}$",
+                "description": "Purpose the issuer declares for keeping this content, as a code of its own. It is what the LGPD requires recorded and what bounds the reading.",
+                "example": "device-location"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "stored",
+                  "erased"
+                ],
+                "description": "`stored` while the content can be read. `erased` once it cannot: either you erased it, or its retention date has passed — a listing never shows as stored something a read would refuse."
+              },
+              "retentionUntil": {
+                "type": "string",
+                "format": "date"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "erasedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "When the content was dropped. Null while it is still there, and also while its retention date has passed and the retention routine has not come round yet."
+              },
+              "content": {
+                "type": "object",
+                "additionalProperties": {},
+                "description": "Content that stays with us, encrypted with your key. It never reaches a record, a log, a URL, a webhook, the public verifier or the network: the record carries the identifier of this content instead."
+              }
+            },
+            "required": [
+              "id",
+              "purpose",
+              "status",
+              "retentionUntil",
+              "createdAt",
+              "erasedAt",
+              "content"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "content"
+        ]
+      },
+      "PrivateContentPage": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "contents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^pct_[0-9a-f]{32}$"
+                },
+                "purpose": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{2,39}$",
+                  "description": "Purpose the issuer declares for keeping this content, as a code of its own. It is what the LGPD requires recorded and what bounds the reading.",
+                  "example": "device-location"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "stored",
+                    "erased"
+                  ],
+                  "description": "`stored` while the content can be read. `erased` once it cannot: either you erased it, or its retention date has passed — a listing never shows as stored something a read would refuse."
+                },
+                "retentionUntil": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "erasedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "When the content was dropped. Null while it is still there, and also while its retention date has passed and the retention routine has not come round yet."
+                }
+              },
+              "required": [
+                "id",
+                "purpose",
+                "status",
+                "retentionUntil",
+                "createdAt",
+                "erasedAt"
+              ]
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^pct_[0-9a-f]{32}$",
+            "description": "Pass it as `cursor` for the next page; null on the last one."
+          }
+        },
+        "required": [
+          "envLabel",
+          "contents",
+          "nextCursor"
+        ]
+      },
+      "CreateConnectorResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "connector": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^con_[0-9a-f]{32}$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ttn"
+                ],
+                "description": "Kind of connector. The URL a network calls is derived from it.",
+                "example": "ttn"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "Operational name of the connector, for whoever runs it. No personal data.",
+                "example": "field oracle"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "disabledAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "uplinkPath": {
+                "type": "string",
+                "description": "Path the network calls, on the connector deployment that serves this kind. The base URL is the deployment's, not the API's.",
+                "example": "/ttn/con_0123456789abcdef0123456789abcdef/uplink"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name",
+              "status",
+              "createdAt",
+              "disabledAt",
+              "uplinkPath"
+            ]
+          },
+          "secret": {
+            "type": "string",
+            "description": "Secret the network presents in the `x-tracetus-connector-secret` header. It is shown this once and cannot be read again; a lost secret means a new connector.",
+            "example": "example-connector-secret-shown-once"
+          }
+        },
+        "required": [
+          "envLabel",
+          "connector",
+          "secret"
+        ]
+      },
+      "CreateConnectorRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ttn"
+            ],
+            "description": "Kind of connector. The URL a network calls is derived from it.",
+            "example": "ttn"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Operational name of the connector, for whoever runs it. No personal data.",
+            "example": "field oracle"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ]
+      },
+      "ConnectorListResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass it as `cursor` to read the next page. Null when this page is the last.",
+            "example": null
+          },
+          "connectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^con_[0-9a-f]{32}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "ttn"
+                  ],
+                  "description": "Kind of connector. The URL a network calls is derived from it.",
+                  "example": "ttn"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "description": "Operational name of the connector, for whoever runs it. No personal data.",
+                  "example": "field oracle"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "disabled"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "disabledAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "uplinkPath": {
+                  "type": "string",
+                  "description": "Path the network calls, on the connector deployment that serves this kind. The base URL is the deployment's, not the API's.",
+                  "example": "/ttn/con_0123456789abcdef0123456789abcdef/uplink"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "name",
+                "status",
+                "createdAt",
+                "disabledAt",
+                "uplinkPath"
+              ]
+            }
+          }
+        },
+        "required": [
+          "envLabel",
+          "count",
+          "nextCursor",
+          "connectors"
+        ]
+      },
+      "ConnectorResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "connector": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^con_[0-9a-f]{32}$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ttn"
+                ],
+                "description": "Kind of connector. The URL a network calls is derived from it.",
+                "example": "ttn"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "Operational name of the connector, for whoever runs it. No personal data.",
+                "example": "field oracle"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "disabledAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "uplinkPath": {
+                "type": "string",
+                "description": "Path the network calls, on the connector deployment that serves this kind. The base URL is the deployment's, not the API's.",
+                "example": "/ttn/con_0123456789abcdef0123456789abcdef/uplink"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name",
+              "status",
+              "createdAt",
+              "disabledAt",
+              "uplinkPath"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "connector"
+        ]
+      },
+      "ConnectorDeviceResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "device": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^cdv_[0-9a-f]{32}$"
+              },
+              "mapping": {
+                "type": "object",
+                "additionalProperties": {},
+                "description": "What this kind of connector needs to turn what the device delivers into record content. Its shape belongs to the kind; the platform stores it and does not read it. A field whose name looks like a position is refused.",
+                "example": {
+                  "deviceRef": "dev_0000000000",
+                  "placeCode": "XX-0000",
+                  "metrics": {
+                    "temperatureC": {
+                      "metric": "TEMPERATURE",
+                      "unit": "C"
+                    }
+                  }
+                }
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "mapping",
+              "createdAt"
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "device"
+        ]
+      },
+      "AddConnectorDeviceRequest": {
+        "type": "object",
+        "properties": {
+          "networkDeviceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_.:@/-]+$",
+            "description": "Address of the device on its own network. It is stored and never returned, never logged and never part of a record.",
+            "example": "example-tracker-01"
+          },
+          "mapping": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "What this kind of connector needs to turn what the device delivers into record content. Its shape belongs to the kind; the platform stores it and does not read it. A field whose name looks like a position is refused.",
+            "example": {
+              "deviceRef": "dev_0000000000",
+              "placeCode": "XX-0000",
+              "metrics": {
+                "temperatureC": {
+                  "metric": "TEMPERATURE",
+                  "unit": "C"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "networkDeviceId",
+          "mapping"
+        ]
+      },
+      "ConnectorDeviceListResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass it as `cursor` to read the next page. Null when this page is the last.",
+            "example": null
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^cdv_[0-9a-f]{32}$"
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "description": "What this kind of connector needs to turn what the device delivers into record content. Its shape belongs to the kind; the platform stores it and does not read it. A field whose name looks like a position is refused.",
+                  "example": {
+                    "deviceRef": "dev_0000000000",
+                    "placeCode": "XX-0000",
+                    "metrics": {
+                      "temperatureC": {
+                        "metric": "TEMPERATURE",
+                        "unit": "C"
+                      }
+                    }
+                  }
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "id",
+                "mapping",
+                "createdAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "envLabel",
+          "count",
+          "nextCursor",
+          "devices"
+        ]
+      },
+      "RemovedConnectorDeviceResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "deviceId": {
+            "type": "string",
+            "pattern": "^cdv_[0-9a-f]{32}$"
+          },
+          "removed": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "envLabel",
+          "deviceId",
+          "removed"
+        ]
+      },
+      "VerifyResponse": {
+        "type": "object",
+        "properties": {
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "proofValid": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Proof checked against the batch root, recomputed here. The check that counts is the public verifier's, against the network."
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^rec_[0-9a-f]{32}$"
+              },
+              "schemaId": {
+                "type": "string",
+                "pattern": "^tracetus:[a-z0-9-]+:[0-9]+$",
+                "example": "tracetus:custody-event:1"
+              },
+              "recordHash": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "batched",
+                  "anchored",
+                  "revoked"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "schemaId",
+              "recordHash",
+              "status",
+              "createdAt"
+            ]
+          },
+          "issuer": {
+            "type": "object",
+            "properties": {
+              "legalName": {
+                "type": "string"
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "country": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 2,
+                "description": "ISO 3166-1 alpha-2"
+              }
+            },
+            "required": [
+              "legalName",
+              "city",
+              "country"
+            ],
+            "description": "Issuer, a legal entity. A natural person never appears in the verifier."
+          },
+          "batch": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^bat_[0-9a-f]{32}$"
+              },
+              "merkleRoot": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "leafCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "sealed",
+                  "submitted",
+                  "confirmed",
+                  "failed"
+                ]
+              },
+              "sealedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "merkleRoot",
+              "leafCount",
+              "status",
+              "sealedAt"
+            ]
+          },
+          "proof": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "leafIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "siblings": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              },
+              "root": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "leafIndex",
+              "siblings",
+              "root"
+            ]
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "network": {
+                  "type": "string",
+                  "enum": [
+                    "rbb",
+                    "public_anchor"
+                  ]
+                },
+                "envLabel": {
+                  "type": "string",
+                  "enum": [
+                    "simulation",
+                    "testnet",
+                    "mainnet"
+                  ],
+                  "example": "simulation"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "submitted",
+                    "confirmed",
+                    "failed"
+                  ]
+                },
+                "txHash": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^0x[0-9a-f]{64}$"
+                },
+                "blockNumber": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Block number as text: it does not fit a JavaScript number."
+                },
+                "confirmedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "network",
+                "envLabel",
+                "status",
+                "txHash",
+                "blockNumber",
+                "confirmedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "envLabel",
+          "proofValid",
+          "record",
+          "issuer",
+          "batch",
+          "proof",
+          "anchors"
+        ]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "envLabel": {
+            "type": "string",
+            "enum": [
+              "simulation",
+              "testnet",
+              "mainnet"
+            ],
+            "example": "simulation"
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "sandbox",
+              "production"
+            ],
+            "example": "sandbox"
+          }
+        },
+        "required": [
+          "status",
+          "envLabel",
+          "environment"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/v1/records": {
+      "post": {
+        "operationId": "records.create",
+        "tags": [
+          "records"
+        ],
+        "summary": "Issue a record",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRecordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Record stored, waiting for a batch",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope, schema not allowed or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate record for this issuer, or an Idempotency-Key still running or already spent",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown schema, payload outside the schema or personal data in the payload",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/records/batch": {
+      "post": {
+        "operationId": "records.createBatch",
+        "tags": [
+          "records"
+        ],
+        "summary": "Issue several records of the same schema",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Records stored, waiting for a batch",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope, schema not allowed or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate record for this issuer, or an Idempotency-Key still running or already spent",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown schema, payload outside the schema or personal data in the payload",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/records/{id}": {
+      "get": {
+        "operationId": "records.get",
+        "tags": [
+          "records"
+        ],
+        "summary": "Read one of the issuer's own records, with batch, proof and anchors",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rec_[0-9a-f]{32}$",
+              "example": "rec_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record with whatever proof exists so far",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope, schema not allowed or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such record for this issuer",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown schema, payload outside the schema or personal data in the payload",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/private-content": {
+      "post": {
+        "operationId": "privateContent.create",
+        "tags": [
+          "private content"
+        ],
+        "summary": "Store content that stays with us, and receive its identifier",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorePrivateContentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Content stored; cite the identifier in records",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateContent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An Idempotency-Key still running or already spent",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Content too large or retention outside the window",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "privateContent.list",
+        "tags": [
+          "private content"
+        ],
+        "summary": "List the issuer's own content by cursor, without the content",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^pct_[0-9a-f]{32}$",
+              "description": "Id of the last row shown."
+            },
+            "required": false,
+            "description": "Id of the last row shown.",
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page, newest first",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateContentPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/private-content/{id}": {
+      "get": {
+        "operationId": "privateContent.get",
+        "tags": [
+          "private content"
+        ],
+        "summary": "Read the content behind one of the issuer's own identifiers",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^pct_[0-9a-f]{32}$",
+              "example": "pct_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The content, decrypted for its issuer",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateContentWithContent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such content for this issuer",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The content was erased",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "privateContent.erase",
+        "tags": [
+          "private content"
+        ],
+        "summary": "Erase the content, keeping the identifier the records cite",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^pct_[0-9a-f]{32}$",
+              "example": "pct_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Content erased; the identifier stays",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateContent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such content for this issuer",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The content was erased",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/connectors": {
+      "post": {
+        "operationId": "connectors.create",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Create a connector, with a URL and a secret of its own",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConnectorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Connector created; the secret is shown once",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateConnectorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This issuer is at its ceiling of connectors, or the Idempotency-Key is still running or already ran — the answer of this route is not kept for replay",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "connectors.list",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "List the issuer's connectors",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^con_[0-9a-f]{32}$",
+              "description": "Public id of the last connector of the previous page."
+            },
+            "required": false,
+            "description": "Public id of the last connector of the previous page.",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of connectors, newest first",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/connectors/{id}/disable": {
+      "post": {
+        "operationId": "connectors.disable",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Disable a connector; its URL stops answering and its key is revoked",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^con_[0-9a-f]{32}$",
+              "example": "con_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connector disabled",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connector for this issuer, or it is disabled",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An Idempotency-Key still running or already spent",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/connectors/{id}/devices": {
+      "post": {
+        "operationId": "connectors.addDevice",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Register a device on a connector",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^con_[0-9a-f]{32}$",
+              "example": "con_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{16,255}$",
+              "example": "9f1c0f9e-6b4f-4f0a-9a0e-1c2d3e4f5a6b",
+              "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused."
+            },
+            "required": true,
+            "description": "A value unique to this call, 16 to 255 characters from A-Z, a-z, 0-9 and the signs . _ : - . The first answer to a key is replayed for 24 hours, so a retry issues once; the same key with a different request is refused.",
+            "in": "header",
+            "name": "Idempotency-Key"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddConnectorDeviceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Device registered",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ],
+                  "description": "Present when this is the stored answer of the first call with this key."
+                },
+                "required": true,
+                "description": "Present when this is the stored answer of the first call with this key."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorDeviceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connector for this issuer, or it is disabled",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This connector already has this device or this reference, is at its ceiling, or an Idempotency-Key is still running",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body above the ceiling of this route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The mapping is not one this kind of connector can read",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The idempotency store did not answer; nothing ran",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "connectors.listDevices",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "List the devices of a connector",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^con_[0-9a-f]{32}$",
+              "example": "con_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^cdv_[0-9a-f]{32}$",
+              "description": "Public id of the last device of the previous page."
+            },
+            "required": false,
+            "description": "Public id of the last device of the previous page.",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of devices, newest first",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorDeviceListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such connector for this issuer, or it is disabled",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/connectors/{id}/devices/{deviceId}": {
+      "delete": {
+        "operationId": "connectors.removeDevice",
+        "tags": [
+          "connectors"
+        ],
+        "summary": "Remove a device from a connector",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^con_[0-9a-f]{32}$",
+              "example": "con_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^cdv_[0-9a-f]{32}$",
+              "example": "cdv_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "deviceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Device removed",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovedConnectorDeviceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such device on this connector",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/verify/{id}": {
+      "get": {
+        "operationId": "verify.get",
+        "tags": [
+          "verification"
+        ],
+        "summary": "Verify a record by public id or by hash, without authentication",
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^rec_[0-9a-f]{32}$"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              ],
+              "example": "rec_0123456789abcdef0123456789abcdef"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record with issuer, batch, proof and anchors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Reference outside the expected format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing found for this reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics": {
+      "get": {
+        "operationId": "metrics.get",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Batch and gas metrics in Prometheus text format",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics in the Prometheus exposition format",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request outside the contract",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope or suspended issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Issuer rate limit reached",
+            "headers": {
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "string",
+                  "description": "The issuer's quota, in requests per minute.",
+                  "example": "120"
+                },
+                "required": true,
+                "description": "The issuer's quota, in requests per minute."
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "string",
+                  "description": "How many of them are left right now.",
+                  "example": "117"
+                },
+                "required": true,
+                "description": "How many of them are left right now."
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds until the whole quota is back.",
+                  "example": "2"
+                },
+                "required": true,
+                "description": "Seconds until the whole quota is back."
+              },
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "description": "Seconds to wait before trying again.",
+                  "example": "60"
+                },
+                "required": true,
+                "description": "Seconds to wait before trying again."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health.get",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Whether the process is up, with its environment label and installation",
+        "responses": {
+          "200": {
+            "description": "The process is answering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

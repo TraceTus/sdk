@@ -1,0 +1,58 @@
+{
+  "name": "@tracetus/sdk",
+  "version": "0.1.0",
+  "description": "TraceTus API client: issue records, read proofs, verify an inclusion proof offline",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.tracetus.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TraceTus/sdk.git",
+    "directory": "packages/sdk-js"
+  },
+  "bugs": {
+    "url": "https://github.com/TraceTus/sdk/issues"
+  },
+  "keywords": ["tracetus", "traceability", "provenance", "merkle", "openapi"],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "node --experimental-strip-types scripts/generate.ts",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "smoke": "node --experimental-strip-types scripts/smoke.ts",
+    "example": "node --experimental-strip-types examples/issue-and-verify.ts"
+  },
+  "devDependencies": {
+    "@tracetus/core": "workspace:*",
+    "@types/node": "^22.20.5",
+    "@vitest/browser-playwright": "^4.1.12",
+    "openapi-typescript": "^7.13.0",
+    "playwright": "^1.65.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.12"
+  }
+}

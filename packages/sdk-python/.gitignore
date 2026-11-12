@@ -1,0 +1,8 @@
+# Any virtual environment, not only the default one: the generator needs a
+# newer Python than this package's floor, so a second one is normal here.
+.venv*/
+__pycache__/
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
