@@ -64,10 +64,11 @@ carries a provenance attestation that names the commit and the run it was
 built from, and `npm audit signatures` checks it.
 
 Building and publishing are separate jobs, and only the publishing ones can
-mint that token. Nothing else runs in them: no install that resolves, no
-global `npm install`, no browser download, no test suite. The jobs that do all
-of that have no token to steal, and hand over exactly the tarball and the
-distributions that get published.
+mint that token. Almost nothing else runs in them: no install that resolves,
+no browser download, no test suite. The jobs that do all of that have no token
+to steal, and hand over exactly the tarball and the distributions that get
+published. "Almost" is one line, named rather than glossed: the npm publish
+job installs npm itself, pinned to the exact version trusted publishing needs.
 
 **One exception, and it is the first version of `@tracetus/sdk`.** Trusted
 publishing cannot create a package that does not exist on the registry, so
@@ -80,9 +81,12 @@ The source of truth is TraceTus's private monorepo. This repository is rebuilt
 from one commit of it at each release, from an explicit list of paths, by a
 command that refuses to produce a tree that holds a secret, a file outside
 that list, a symlink, bytes that are not what a file's name says, or anything
-private to that repository. Two separate extractions of the commit have to
-give the same tree, and the release commit records the git tree id, so the
-tree that was reviewed is the tree that was pushed.
+private to that repository. **Nothing in that build resolves or downloads
+anything** — the lockfile is a reviewed file of that repository, not a
+question put to a registry — so two separate extractions of the commit give
+the same tree with no network at all, and the release commit records its git
+tree id. That is what makes "the tree that was reviewed is the tree that was
+pushed" something a stranger can check rather than a promise.
 
 ## Supported versions
 

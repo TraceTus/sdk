@@ -90,12 +90,13 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-`pnpm-lock.yaml` is the one file here that is not a copy of something in the
-monorepo: it is resolved for this workspace when the mirror builds it, so that
-the install in the pipeline and the install on your machine are the same
-install. Everything else in this repository is byte for byte what one commit
-of the monorepo holds, which is why the release that produced it can be
-checked by rebuilding it.
+`pnpm-lock.yaml` is resolved for this workspace and reviewed in the monorepo
+before it is copied here, like everything else: the install in the pipeline
+and the install on your machine are the same install, and every version in it
+is one the monorepo already resolved and tested. So this whole repository is
+byte for byte what one commit of that one holds, which is why the release that
+produced it can be checked by rebuilding it — the tree id in the release
+commit is the check.
 
 Nothing committed on top of a release survives the next one — a fix, a
 lockfile, a tweak. That is what "mirror" means here.

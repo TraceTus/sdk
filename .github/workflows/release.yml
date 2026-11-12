@@ -8,12 +8,18 @@
 #
 # **Building and publishing are separate jobs, and only the publishing ones can
 # mint the identity token.** That is the whole shape of this file. A job that
-# holds `id-token: write` can publish under our names, so nothing else runs in
-# it: no install that resolves, no global `npm install`, no browser download,
-# no test suite, no development dependency of any kind. A compromised
-# development dependency on release day would otherwise publish with valid
-# provenance. The building jobs do all of that with no token to steal, and hand
-# over exactly two files through an artifact.
+# holds `id-token: write` can publish under our names, so almost nothing runs
+# in it: no install that resolves, no browser download, no test suite, no
+# development dependency of any kind. A compromised development dependency on
+# release day would otherwise publish with valid provenance. The building jobs
+# do all of that with no token to steal, and hand over exactly two files
+# through an artifact.
+#
+# "Almost" is one line, and it is named rather than glossed: `publish-npm`
+# installs npm itself, pinned to the version trusted publishing needs. It is a
+# global install in the job that holds the token, which is the one thing here
+# that is not ideal; it is pinned to an exact version rather than resolved, and
+# it is npm installing npm from the registry it is about to publish to.
 #
 # Two tags, one per package, because a package may need a release the other
 # does not: `sdk-js-v1.2.3` publishes `@tracetus/sdk` and `sdk-python-v1.2.3`
@@ -125,6 +131,11 @@ jobs:
 
       # The one file the publishing job gets. It is built here, by a job with
       # no token, and published there without being rebuilt.
+      #
+      # `mkdir` first, on the same line: `--pack-destination` writes into a
+      # directory and does not create one, which is what made this file's
+      # first run fail, and `test/public-sdk-verify.test.ts` reads this line
+      # and requires the `&&`.
       - name: Pack what npm would receive
         working-directory: packages/sdk-js
         run: mkdir -p ../../tarball && npm pack --pack-destination ../../tarball
